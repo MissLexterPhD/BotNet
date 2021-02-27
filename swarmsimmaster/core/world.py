@@ -15,11 +15,26 @@ from core import agent, item, location, vis3d, velo_controlled_agent
 from core.visualization.utils import show_msg, TopQFileDialog, VisualizationError, Level
 
 
-def load_scenario(mod, world):
-    try:
-        mod.scenario(world)
-    except VisualizationError as ve:
-        world._scenario_load_error = ve
+
+def load_scenario(mod, world, goons=None):
+    """
+    Function to load the scenario into the world.
+
+    Parameters:
+    -----------
+        goons = a place to pass optional arguments into the scenario functions. Must be used in conjuction with a scenario which accepts args.
+
+    """
+    if goons:
+        try:
+            mod.scenario(world, goons)
+        except VisualizationError as ve:
+            world._scenario_load_error = ve
+    else:
+        try:
+            mod.scenario(world)
+        except VisualizationError as ve:
+            world._scenario_load_error = ve
 
 
 class World:
@@ -65,7 +80,9 @@ class World:
         self.csv_round = self.csv_generator_module.CsvRoundData(scenario=config_data.scenario,
                                                                 solution=config_data.solution,
                                                                 seed=config_data.seed_value,
-                                                                directory=config_data.directory_csv)
+
+                                                                directory=config_data.directory_csv, agents=self.get_agent_list())
+
 
         if config_data.visualization:
             self.vis = vis3d.Visualization(self)
@@ -113,14 +130,19 @@ class World:
         if self.vis is not None:
             self.vis.reset()
 
-    def init_scenario(self, scenario_module):
+
+    def init_scenario(self, scenario_module, goons=None):
+        """Manages Threads and calls load scenario"""
+        print("goods:")
+        print(goons)
         if self.config_data.visualization:
             # if visualization is on, run the scenario in a separate thread and show that the program runs..
-            x = threading.Thread(target=load_scenario, args=(scenario_module, self,))
+            x = threading.Thread(target=load_scenario, args=(scenario_module, self, goons))
             self.vis.wait_for_thread(x, "loading scenario... please wait.", "Loading Scenario")
         else:
             # if no vis, just run the scenario on the main thread
-            load_scenario(scenario_module, self)
+            load_scenario(scenario_module, self, goons)
+
 
         if self._scenario_load_error is not None:
             show_msg("Error while loading Scenario:\n%s" % self._scenario_load_error.msg, Level.CRITICAL,
@@ -382,7 +404,7 @@ class World:
     def set_location_deleted(self):
         self.__location_deleted = False
 
-    ##TODO: add ability to set initial velocities.
+
     def add_agent(self, coordinates, color=None, new_class=agent.Agent, velocities=None):
         """
         Add an agent to the world database

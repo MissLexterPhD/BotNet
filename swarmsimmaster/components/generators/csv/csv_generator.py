@@ -244,7 +244,9 @@ class CsvRoundData:
         self.agents_dropped = self.agents_dropped + agents_dropped
         logging.debug("CSV: Ending writing_rounds")
 
-    def next_line(self, sim_round):
+
+    def next_line(self, sim_round, agents=None):
+
         csv_iterator = ['', self.scenario, self.solution, self.seed, sim_round,
                         self.success_counter, self.success_round,
                         self.agent_num, self.agents_created, self.agents_created_sum,

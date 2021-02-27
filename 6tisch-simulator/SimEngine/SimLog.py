@@ -194,8 +194,10 @@ class SimLog(object):
             }
         )
 
+
         # write line
         try:
+            print(f'content: {content}')
             json_string = json.dumps(content, sort_keys=True)
             self.log_output_file.write(json_string + u'\n')
         except Exception as err:

@@ -1,5 +1,13 @@
 
-def scenario(world):
-    world.add_agent((-1.0,0.0))
-    world.add_agent((0.0,0.0))
-    world.add_agent((1.0,0.0))
+import numpy as np
+from enum import Enum
+
+def scenario(world, goons=None):
+    print("lonely agent")
+    if goons:
+        for agent in goons:
+            world.add_agent(agent)
+    else:
+        world.add_agent(world.grid.get_center())
+
+

@@ -8,10 +8,18 @@ import time
 import random
 from core import world, config
 from core.vis3d import ResetException
+import pandas as pd
 
 def read_cmd_args(config_data, argv=[]):
+
+    """Reads in the arguments from the command line to update config_data"""
     try:
-        opts, args = getopt.getopt(argv, "hs:w:r:n:m:d:v:", ["solution=", "scenario="])
+        opts, args = getopt.getopt(argv, "hs:w:r:n:m:d:v:",
+                        ["solution=", "scenario=",
+                        "init=", "comms=", "spacing=", "num_agents=",
+                        "flock_rad=", "flock_vel=",
+                        "run_id=", "follow="])
+
     except getopt.GetoptError:
         print('Error: swarm-swarm_sim_world.py -r <seed> -w <scenario> -s <solution> -n <maxRounds>')
         sys.exit(2)
@@ -33,9 +41,27 @@ def read_cmd_args(config_data, argv=[]):
             config_data.visualization = int(arg)
         elif opt in "-d":
             config_data.local_time = str(arg)
+        elif opt in "--comms":
+            config_data.comms_model = arg
+        elif opt in "--init":
+            config_data.scenario_arg = arg
+        elif opt in "--spacing":
+            config_data.spacing = float(arg)
+        elif opt in "--num_agents":
+            config_data.num_agents = int(arg)
+        elif opt in "--flock_rad":
+            config_data.flock_rad = float(arg)
+        elif opt in "--flock_vel":
+            config_data.flock_vel = float(arg)
+        elif opt in "--run_id":
+            config_data.id = arg
+        elif opt in "--follow":
+            config_data.follow = bool(int(arg))
 
 
 def create_directory_for_data(config_data, unique_descriptor):
+    """Creates a directory for the data collected during simulation"""
+
     if config_data.multiple_sim == 1:
         config_data.directory_name = "%s/%s" % (unique_descriptor, str(config_data.seed_value))
 
@@ -62,15 +88,65 @@ def generate_data(config_data, swarm_sim_world):
 
 
 def get_solution(config_data):
+    """
+    returns the solution function
+
+    Parameters:
+    -----------
+        config_data
+            The configuration object for the world to query the solution name
+
+    Returns:
+    solution function
+    """
     return importlib.import_module('components.solution.' + config_data.solution)
 
 
 def get_scenario(config_data):
+    """
+    returns the scenario function
+
+    Parameters:
+    -----------
+        config_data
+            The configuration object for the world to query the scenario name
+
+    Returns:
+    Scenario function
+    """
     return importlib.import_module('components.scenario.' + config_data.scenario)
 
 ##threading with the passing of initial conditions
 class SwarmSimCommsEnv():
-    def __init__(self, goons=[(0,0,0)]):
+    """
+    A class meant to interface swarmsim with a network simulator.
+
+    Methods:
+    ---------
+    main_loop(self, iterations=1)
+        runs the simulation for iterations timesteps
+
+    end(self)
+        ends the simulation
+
+    do_reset(self)
+        resets the simulation
+
+    assign_velos(self, new_velos):
+        assigns new velocities to each of the agents in the simulation.
+
+    get_all_mote_states(self)
+        returns the state of each agent in the simulation.
+
+    """
+    def __init__(self, goons=None):
+        """
+        Initializes the simulation and object
+
+        Parameters:
+            goons
+                optional argument to be passed into the scenario
+        """
 
         #get config data
         self.config_data = config.ConfigData()
@@ -87,23 +163,41 @@ class SwarmSimCommsEnv():
         read_cmd_args(self.config_data)
 
         create_directory_for_data(self.config_data, unique_descriptor)
+
+
+
         random.seed(self.config_data.seed_value)
 
         #set up world
         self.swarm_sim_world = world.World(self.config_data)
-        self.swarm_sim_world.init_scenario(get_scenario(self.swarm_sim_world.config_data))
+
+
+        self.swarm_sim_world.init_scenario(get_scenario(self.swarm_sim_world.config_data), goons)
+        cols = []
+        for agent in self.swarm_sim_world.get_agent_list():
+            cols.append(agent.get_id())
+        self.results_df = pd.DataFrame(columns=cols)
+
 
     def main_loop(self, iterations=1):
-        round_start_timestamp = time.perf_counter()  # TODO: work with this
+        """Runs the simulation for iteration number of times"""
+        round_start_timestamp = time.perf_counter()
         # keep simulation going if set to infinite or there are still rounds left
         i = 0
         while i < iterations:
             try:
                 # check to see if its neccessary to run the vis
+
                 if self.config_data.visualization:
                     self.swarm_sim_world.vis.run(round_start_timestamp) # FIXME: seg fault when visualization enabled with 6TiSCH
+
                 # run the solution for 1 step
                 self.run_solution()
+                new_row = {}
+                for agent in self.swarm_sim_world.get_agent_list():
+                    new_row[agent.get_id()] = agent.coordinates
+                self.results_df = self.results_df.append(new_row, ignore_index=True)
+
             except ResetException: # TODO: need to improve exception handlng
                 self.do_reset()
                 return False
@@ -114,6 +208,9 @@ class SwarmSimCommsEnv():
 
     def end(self):
         # TODO: Edit this because it is for end
+
+        """Ends the simulation"""
+
         if self.config_data.visualization:
             try:
                 self.swarm_sim_world.vis.run(round_start_timestamp)
@@ -124,17 +221,21 @@ class SwarmSimCommsEnv():
                 return True
 
         logging.info('Finished')
-        self.generate_data(self.config_data, self.swarm_sim_world)
+        file_path = self.swarm_sim_world.config_data.directory_csv + "/simple.csv"
 
-    #make a solution that just calculates where they are based on the velos
+        self.results_df.to_csv(file_path, index=True, )
+
+
     def run_solution(self):
+        """Calls the solution on the Simulation world, updates the logging and round counter."""
         if self.swarm_sim_world.config_data.agent_random_order_always:
             random.shuffle(self.swarm_sim_world.agents)
         get_solution(self.swarm_sim_world.config_data).solution(self.swarm_sim_world)
-        self.swarm_sim_world.csv_round.next_line(self.swarm_sim_world.get_actual_round())
+        self.swarm_sim_world.csv_round.next_line(self.swarm_sim_world.get_actual_round(), self.swarm_sim_world.get_agent_list())
         self.swarm_sim_world.inc_round_counter_by(number=1)
 
     def do_reset(self):
+        """Returns simulation to it's original state"""
         self.swarm_sim_world.reset()
         solution = get_solution(self.swarm_sim_world.config_data)
         scenario = get_scenario(self.swarm_sim_world.config_data)
@@ -144,18 +245,33 @@ class SwarmSimCommsEnv():
 
     #will have to add functionality to make sure the velos are gud
     def assign_velos(self, new_velos):
+
+        """
+        Updates the velocity of each agent
+
+        Parameters:
+            new_velos: dictionary
+                Maps mote ids to desired velocities
+        """
+
         id_map = self.swarm_sim_world.get_agent_map_id()
         for mote in new_velos:
             id_map[mote].set_velocities(new_velos[mote])
 
-    def set_all_mote_neighbors(self, agent_neighbor_dict):
-        for i, (agent_id, neighbors) in agent_neighbor_dict:
+    def set_all_mote_neighbors(self, agent_neighbor_table):
+        id_map = self.swarm_sim_world.get_agent_map_id()
+        for (net_id, neighbors) in agent_neighbor_table:
+            agent_id = self.mote_key_map[net_id]  # NOTE: this is set in the network simulator
             mote = id_map[agent_id]
+            mote.id = agent_id  # FIXME: THIS IS DUMB BUT IT WORKS
             mote.neighbors = neighbors
-            if mote.id != 0 or _leader_agent_move(self.swarm_sim_world, mote):
-                mote.control_update()
+            if net_id != 0 or not self._leader_agent_move(mote):
+                mote.control_update(self.mote_key_map)
 
     def get_all_mote_states(self):
+
+        """Returns a dictionary mapping agent ids to position"""
+
         id_map = self.swarm_sim_world.get_agent_map_id()
         positions = {}
         for agent_id in id_map:
@@ -164,25 +280,28 @@ class SwarmSimCommsEnv():
 
         return positions
 
-    def _leader_agent_move(world, agent):
-        if world.get_actual_round() < 200:
+    def _leader_agent_move(self, agent):
+        round = self.swarm_sim_world.get_actual_round()
+        if round < 200:
             agent.set_velocities((1, 0, 0))
-        elif world.get_actual_round() < 300:
+        elif round < 300:
             agent.set_velocities((1, 10, 0))
-        elif world.get_actual_round() < 400:
+        elif round < 400:
             agent.set_velocities((0, 1, 0))
-        elif world.get_actual_round() < 650:
+        elif round < 650:
             agent.set_velocities((-1, -2, 0))
         else:
             return False
         return True
 
 if __name__ == "__main__":
-    test = SwarmSimCommsEnv()
+
+    test = SwarmSimCommsEnv([(0,0,0), (0,0,1), (0, 1, 0)])
     motes = test.get_all_mote_states().keys()
     velos = {}
 
-    print(test.get_all_mote_states())
+   # print(test.get_all_mote_states())
+
     while True:
         test.main_loop(1)
         for agent in motes:

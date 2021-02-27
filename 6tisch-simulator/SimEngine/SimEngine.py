@@ -29,20 +29,20 @@ from . import SimConfig
 
 # special SwarmSim import
 # insert at 1, 0 is the script path (or '' in REPL)
+
 import os
 SIMENGINE_ROOT_PATH = os.path.dirname(__file__)
 SWARM_SIM_MASTER_PATH = os.path.join(
     SIMENGINE_ROOT_PATH,
     '../../gym-swarm-sim/envs/swarmsimmaster'
 )
-sys.path.insert(1, SWARM_SIM_MASTER_PATH)
-import comms_env
 import numpy as np
+import rpyc
 
 
 # =========================== defines =========================================
 
-ROBOT_SIM_ENABLED = False
+ROBOT_SIM_ENABLED = True
 
 # =========================== body ============================================
 
@@ -446,19 +446,24 @@ class SimEngine(DiscreteEventEngine):
         # TODO: scale velocities accordingly, not terribly important right now
         robotCoords                     = [(float(i) / 10, 0, 0) for i in range(self.settings.exec_numMotes)] # FIXME: this isn't actually changing coordinates
         self.networkStarted             = False
+
         
         if ROBOT_SIM_ENABLED:
-            self.robot_sim                  = comms_env.SwarmSimCommsEnv(robotCoords)
-            self.robot_sim.mote_key_map     = {}
+
+            self.robot_sim                  =  rpyc.connect("localhost", 18861, config={'allow_public_attrs': True}).root
+            self.robot_sim.initialize_simulation(robotCoords)
+            self.robot_sim.set_mote_key_map({})
 
             moteStates = self.robot_sim.get_all_mote_states()
             print(moteStates) # hmmm
             print(self.motes)
+            new_map = {}
             for i, robot_mote_id in enumerate(moteStates.keys()):
                 mote = self.motes[i]
-                self.robot_sim.mote_key_map[mote.id] = robot_mote_id
+                new_map[mote.id] = robot_mote_id
                 mote.setLocation(*(moteStates[robot_mote_id][:2]))
                 print(mote.getLocation())
+            self.robot_sim.set_mote_key_map(new_map)
         else:
             for i, coord in enumerate(robotCoords):
                 mote = self.motes[i]
@@ -552,14 +557,15 @@ class SimEngine(DiscreteEventEngine):
     # ============== Robot Simulator Communication ====================
 
     def _robo_sim_loop(self, steps=1):
-        self.robot_sim.main_loop(steps)
+        if self.networkStarted:
+            self.robot_sim.main_loop(steps)
 
     def _robo_sim_sync(self):
         networkStartSwitch = True
 
         states = self.robot_sim.get_all_mote_states()
         for mote in self.motes:
-            mote.setLocation(*(states[self.robot_sim.mote_key_map[mote.id]][:2]))
+            mote.setLocation(*(states[self.robot_sim.get_mote_key_map()[mote.id]][:2]))
             networkStartSwitch = networkStartSwitch and mote.tsch.isSync
         
         self.connectivity.matrix.update()
@@ -573,13 +579,13 @@ class SimEngine(DiscreteEventEngine):
         if self.asn % self.settings.rrsf_slotframe_len != 0:
             return
 
-        agent_neighbor_dict = {}
+        agent_neighbor_table = []
         for agent in self.motes:
             if agent.neighbors:
-                agent_neighbor_dict[self.robot_sim.mote_key_map[agent.id]] = agent.neighbors
-                agent.neighbors = [] # flush neighbors
+                agent_neighbor_table.append((agent.id, agent.neighbors))
+                agent.neighbors = {} # flush neighbors # flush neighbors
 
-        self.robot_sim.set_all_mote_neighbors(agent_neighbor_dict)
+        self.robot_sim.set_all_mote_neighbors(agent_neighbor_table)
 
     def _robo_sim_control(self):
         # NOTE: DEPRECATED
@@ -605,7 +611,7 @@ class SimEngine(DiscreteEventEngine):
                 vy += 2*(y1-y2) * (k_conn*np.exp((dist)/(R2*R2)) / (R2*R2) - k_col*np.exp(-(dist)/(R1*R1)) / (R1*R1))
                 vz += 0
                 
-            control_inputs[self.robot_sim.mote_key_map[agent.id]] = (-vx, -vy, -vz)
+            control_inputs[self.robot_sim.get_mote_key_map()[agent.id]] = (-vx, -vy, -vz)
 
         self.robot_sim.assign_velos(control_inputs)
 

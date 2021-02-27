@@ -39,9 +39,10 @@ import shutil
 
 from SimEngine import SimConfig,   \
                       SimEngine,   \
-                      SimLog, \
                       SimSettings, \
-                      Connectivity
+                      Connectivity, \
+                      SimLog
+
 
 # =========================== helpers =========================================
 
@@ -281,7 +282,7 @@ def main():
                     'pid':                os.getpid(),
                     'numRuns':            runs,
                     'first_run':          first_run,
-                    'verbose':            False,
+                    'verbose':            True,
                     'config_data':        simconfig.get_config_data()
                 } for [cpuID, (runs, first_run)] in enumerate(runsPerCPU)
             ]

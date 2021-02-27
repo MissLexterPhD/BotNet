@@ -11,7 +11,9 @@ from core.vis3d import ResetException
 
 
 def swarm_sim(argv=[]):
-    """In the main function first the config is getting parsed and than
+
+    """In the main function first the config is getting parsed and then
+
     the swarm_sim_world and the swarm_sim_world item is created. Afterwards the run method of the swarm_sim_world
     is called in which the simulator is going to start to run"""
     config_data = config.ConfigData()
@@ -28,7 +30,12 @@ def swarm_sim(argv=[]):
     create_directory_for_data(config_data, unique_descriptor)
     random.seed(config_data.seed_value)
     swarm_sim_world = world.World(config_data)
-    swarm_sim_world.init_scenario(get_scenario(swarm_sim_world.config_data))
+
+    try:
+        swarm_sim_world.init_scenario(get_scenario(swarm_sim_world.config_data), config_data.scenario_arg)
+    except:
+        swarm_sim_world.init_scenario(get_scenario(swarm_sim_world.config_data))
+
 
     reset = True
     while reset:
@@ -75,7 +82,13 @@ def do_reset(swarm_sim_world):
 
 def read_cmd_args(config_data, argv=[]):
     try:
-        opts, args = getopt.getopt(argv, "hs:w:r:n:m:d:v:", ["solution=", "scenario="])
+
+        opts, args = getopt.getopt(argv, "hs:w:r:n:m:d:v:",
+                        ["solution=", "scenario=",
+                        "init=", "comms=", "spacing=", "num_agents=",
+                        "flock_rad=", "flock_vel=",
+                        "run_id=", "follow="])
+
     except getopt.GetoptError:
         print('Error: swarm-swarm_sim_world.py -r <seed> -w <scenario> -s <solution> -n <maxRounds>')
         sys.exit(2)
@@ -98,13 +111,32 @@ def read_cmd_args(config_data, argv=[]):
         elif opt in "-d":
             config_data.local_time = str(arg)
 
+        elif opt in "--comms":
+            config_data.comms_model = arg
+        elif opt in "--init":
+            config_data.scenario_arg = arg
+        elif opt in "--spacing":
+            config_data.spacing = float(arg)
+        elif opt in "--num_agents":
+            config_data.num_agents = int(arg)
+        elif opt in "--flock_rad":
+            config_data.flock_rad = float(arg)
+        elif opt in "--flock_vel":
+            config_data.flock_vel = float(arg)
+        elif opt in "--run_id":
+            config_data.id = arg
+        elif opt in "--follow":
+            config_data.follow = bool(int(arg))
+
+
 
 def create_directory_for_data(config_data, unique_descriptor):
     if config_data.multiple_sim == 1:
         config_data.directory_name = "%s/%s" % (unique_descriptor, str(config_data.seed_value))
 
-        config_data.directory_name = "./outputs/csv/mulitple/" + config_data.directory_name
-        config_data.directory_plot = "./outputs/plot/mulitple/" + config_data.directory_name
+        config_data.directory_csv = "./outputs/csv/multiple/" + config_data.directory_name
+        config_data.directory_plot = "./outputs/plot/multiple/" + config_data.directory_name
+
 
 
     else:
@@ -112,6 +144,7 @@ def create_directory_for_data(config_data, unique_descriptor):
 
         config_data.directory_csv = "./outputs/csv/" + config_data.directory_name
         config_data.directory_plot = "./outputs/plot/" + config_data.directory_name
+
     if not os.path.exists(config_data.directory_csv):
         os.makedirs(config_data.directory_csv)
     if not os.path.exists(config_data.directory_plot):
@@ -121,7 +154,9 @@ def run_solution(swarm_sim_world):
     if swarm_sim_world.config_data.agent_random_order_always:
         random.shuffle(swarm_sim_world.agents)
     get_solution(swarm_sim_world.config_data).solution(swarm_sim_world)
-    swarm_sim_world.csv_round.next_line(swarm_sim_world.get_actual_round())
+
+    swarm_sim_world.csv_round.next_line(swarm_sim_world.get_actual_round(), swarm_sim_world.get_agent_list())
+
     swarm_sim_world.inc_round_counter_by(number=1)
 
 
