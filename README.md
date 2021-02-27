@@ -1,4 +1,4 @@
-# SwarmCommSim: A Simulator for (Optionally) Networked Multi-Agent Control and Swarm vs. Swarm Games
+# BotNet: A Simulator for (Optionally) Networked Multi-Agent Control and Swarm vs. Swarm Games
 
 ## Setup:
 
