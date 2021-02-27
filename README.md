@@ -46,6 +46,8 @@ The 6TiSCH simulator can be seamlessly integrated to validate control performanc
 
 Running Google Doc: https://docs.google.com/document/d/1OhyHHBxHN3_bAwsYYcrqfswcTrh-pLQrN6X59aoQMSg/edit?usp=sharing
 
+----
+
 ## Running the code
 
 ### BotNet RPC server:
@@ -60,3 +62,24 @@ This will let you remotely control the simulator via the service variable.
 
 `python ../../../6tisch-simulator/bin/runSim.py`
 
+----
+
+## Examples
+
+#### Flocking
+
+#### Formation Control
+
+----
+
+## Citation
+To cite this work, please use the following (_we can upload to arxiv so everything is good to go_):
+```
+@article{botnet2021,
+  Title = {todo},
+  Author = {todo},
+  journal={todo},
+  year={2021}
+}
+
+```
